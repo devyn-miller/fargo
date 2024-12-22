@@ -1,7 +1,8 @@
 {
   "dependencies": {
+    "@types/multer": "^1.4.12",
+    "googleapis": "^144.0.0",
     "moment": "^2.29.4",
     "react-big-calendar": "^1.6.8"
   }
 }
-
