@@ -1,129 +1,150 @@
-'use client'
+'use client';
 
-import { useState, useEffect } from 'react'
-import { ref, onValue, push, set } from 'firebase/database'
-import { db } from '../lib/firebase'
-import Image from 'next/image'
-import { PhotoUpload } from '../components/PhotoUpload'
-import { PageHeader } from '../components/PageHeader'
+import { useState, useEffect } from 'react';
+import { listFilesInFolder } from '../lib/googleDrive';
+import PhotoUpload from '../components/PhotoUpload';
+import { PageHeader } from '../components/PageHeader';
 
-interface Photo {
-  id: string
-  url: string
-  caption: string
-  uploader: string
-  comments?: { [key: string]: { author: string; content: string; timestamp: number } }
+interface PhotoFile {
+  id: string;
+  name: string;
+  webViewLink: string;
+  webContentLink: string;
+  metadata: {
+    title?: string;
+    description?: string;
+    date?: string;
+    tags?: string[];
+    location?: string;
+  };
 }
 
-function Comment({ comment }: { comment: { author: string; content: string; timestamp: number } }) {
-  return (
-    <div className="bg-gray-100 rounded p-2 mb-2">
-      <p className="text-sm">{comment.content}</p>
-      <p className="text-xs text-gray-600">
-        By {comment.author} on {new Date(comment.timestamp).toLocaleString()}
-      </p>
-    </div>
-  )
-}
+export default function PhotoGallery() {
+  const [photos, setPhotos] = useState<PhotoFile[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedTag, setSelectedTag] = useState<string>('All');
+  const [tags, setTags] = useState<string[]>(['All']);
 
-function AddComment({ photoId, onCommentAdded }: { photoId: string; onCommentAdded: () => void }) {
-  const [comment, setComment] = useState('')
-  const [author, setAuthor] = useState('')
+  const fetchPhotos = async () => {
+    try {
+      const files = await listFilesInFolder(undefined, 'image');
+      setPhotos(files as PhotoFile[]);
+      
+      // Extract unique tags
+      const uniqueTags = new Set<string>();
+      files.forEach(file => {
+        file.metadata.tags?.forEach(tag => uniqueTags.add(tag));
+      });
+      setTags(['All', ...Array.from(uniqueTags)]);
+    } catch (error) {
+      console.error('Error fetching photos:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!comment.trim() || !author.trim()) return
+  useEffect(() => {
+    fetchPhotos();
+  }, []);
 
-    const commentRef = ref(db, `photos/${photoId}/comments`)
-    const newCommentRef = push(commentRef)
-    await set(newCommentRef, {
-      content: comment,
-      author: author,
-      timestamp: Date.now()
-    })
+  const handleUploadComplete = () => {
+    fetchPhotos();
+  };
 
-    setComment('')
-    setAuthor('')
-    onCommentAdded()
+  const filteredPhotos = selectedTag === 'All'
+    ? photos
+    : photos.filter(photo => photo.metadata.tags?.includes(selectedTag));
+
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center min-h-screen">
+        <div className="text-xl">Loading photos...</div>
+      </div>
+    );
   }
 
   return (
-    <form onSubmit={handleSubmit} className="mt-2">
-      <input
-        type="text"
-        value={author}
-        onChange={(e) => setAuthor(e.target.value)}
-        placeholder="Your Name"
-        className="w-full p-2 border rounded mb-2 text-sm"
-        required
-      />
-      <input
-        type="text"
-        value={comment}
-        onChange={(e) => setComment(e.target.value)}
-        placeholder="Add a comment..."
-        className="w-full p-2 border rounded mb-2 text-sm"
-        required
-      />
-      <button type="submit" className="bg-primary text-white p-2 rounded text-sm">Post Comment</button>
-    </form>
-  )
-}
-
-
-export default function PhotoGallery() {
-  const [photos, setPhotos] = useState<Photo[]>([])
-
-  useEffect(() => {
-    const photosRef = ref(db, 'photos')
-    onValue(photosRef, (snapshot) => {
-      const data = snapshot.val()
-      if (data) {
-        const photoList = Object.entries(data).map(([id, photo]: [string, any]) => ({
-          id,
-          ...photo,
-        }))
-        setPhotos(photoList.sort((a, b) => b.timestamp - a.timestamp))
-      }
-    })
-  }, [])
-
-  return (
-    <div>
+    <div className="container mx-auto px-4 py-8">
       <PageHeader 
         title="Photo Gallery" 
-        description="Cherish our family moments through pictures"
+        description="Browse through our cherished family photos"
       />
-      <PhotoUpload />
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 mt-8">
-        {photos.map((photo) => (
-          <div key={photo.id} className="bg-white rounded-lg shadow-md overflow-hidden transition-transform hover:scale-105">
-            <Image
-              src={photo.url}
-              alt={photo.caption}
-              width={300}
-              height={200}
-              className="w-full h-48 object-cover"
-            />
+
+      <div className="mb-8">
+        <h2 className="text-2xl font-semibold mb-4">Upload New Photos</h2>
+        <PhotoUpload onUploadComplete={handleUploadComplete} />
+      </div>
+
+      <div className="mb-6">
+        <label className="block text-sm font-medium text-gray-700 mb-2">
+          Filter by Tag:
+        </label>
+        <select
+          value={selectedTag}
+          onChange={(e) => setSelectedTag(e.target.value)}
+          className="w-full p-2 border rounded focus:outline-none focus:ring-2 focus:ring-primary"
+        >
+          {tags.map((tag) => (
+            <option key={tag} value={tag}>{tag}</option>
+          ))}
+        </select>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+        {filteredPhotos.map((photo) => (
+          <div key={photo.id} className="bg-white rounded-lg shadow-md overflow-hidden">
+            <div className="aspect-w-1 aspect-h-1">
+              <img
+                src={`https://drive.google.com/uc?id=${photo.id}`}
+                alt={photo.metadata.title || photo.name}
+                className="object-cover w-full h-full"
+              />
+            </div>
             <div className="p-4">
-              <p className="text-sm text-gray-600 mb-2">{photo.caption}</p>
-              <p className="text-xs text-gray-500 mb-2">Uploaded by: {photo.uploader}</p>
-              <div className="flex space-x-2 mb-2">
-                <button className="text-gray-500 hover:text-blue-500">👍 Like</button>
-                <button className="text-gray-500 hover:text-red-500">❤️ Love</button>
-              </div>
-              <div className="mt-4">
-                <h4 className="text-sm font-semibold mb-2">Comments</h4>
-                {photo.comments && Object.entries(photo.comments).map(([id, comment]: [string, any]) => (
-                  <Comment key={id} comment={comment} />
-                ))}
-                <AddComment photoId={photo.id} onCommentAdded={() => {}} />
-              </div>
+              <h3 className="text-lg font-semibold mb-2">{photo.metadata.title || photo.name}</h3>
+              {photo.metadata.description && (
+                <p className="text-gray-600 mb-2">{photo.metadata.description}</p>
+              )}
+              {photo.metadata.date && (
+                <p className="text-sm text-gray-500 mb-1">
+                  Date: {new Date(photo.metadata.date).toLocaleDateString()}
+                </p>
+              )}
+              {photo.metadata.location && (
+                <p className="text-sm text-gray-500 mb-1">
+                  Location: {photo.metadata.location}
+                </p>
+              )}
+              {photo.metadata.tags && photo.metadata.tags.length > 0 && (
+                <div className="flex flex-wrap gap-2 mt-2">
+                  {photo.metadata.tags.map((tag, index) => (
+                    <span
+                      key={index}
+                      className="bg-gray-100 text-gray-600 px-2 py-1 rounded-full text-sm"
+                    >
+                      {tag}
+                    </span>
+                  ))}
+                </div>
+              )}
+              <a
+                href={photo.webContentLink}
+                className="inline-block mt-4 text-blue-600 hover:text-blue-800"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Download
+              </a>
             </div>
           </div>
         ))}
       </div>
-    </div>
-  )
-}
 
+      {photos.length === 0 && (
+        <div className="text-center text-gray-600 mt-8">
+          No photos uploaded yet. Start by uploading your first photo!
+        </div>
+      )}
+    </div>
+  );
+}
