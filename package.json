@@ -1,9 +1,44 @@
 {
+  "name": "family-website",
+  "version": "1.0.0",
+  "description": "A family website to share photos, videos, memories, and events",
+  "main": "index.js",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint",
+    "test": "jest --watch"
+  },
   "dependencies": {
-    "@types/google-apps-script": "^1.0.86",
-    "@types/multer": "^1.4.12",
-    "googleapis": "^144.0.0",
-    "moment": "^2.29.4",
-    "react-big-calendar": "^1.6.8"
-  }
+    "@google-cloud/storage": "^6.9.0",  // For Google Drive integration
+    "@headlessui/react": "^1.7.3",     // Accessible components
+    "@supabase/supabase-js": "^2.2.1", // Optional: For database (if added)
+    "@tailwindcss/forms": "^0.5.3",    // Tailwind plugin for better forms
+    "@tailwindcss/typography": "^0.5.9", // Tailwind plugin for rich text
+    "firebase": "^9.22.0",             // Optional: For Firebase Auth/Storage
+    "googleapis": "^114.0.0",          // Google Drive API
+    "lucide-react": "^0.26.0",         // Icons for the UI
+    "next": "13.4.9",                  // Next.js framework
+    "react": "18.2.0",                 // React core library
+    "react-dom": "18.2.0",             // React DOM library
+    "react-image-crop": "^10.0.7",     // For image cropping
+    "react-responsive-carousel": "^3.2.23", // Optional: Carousel alternative
+    "tailwindcss": "^3.3.0"            // CSS framework
+  },
+  "devDependencies": {
+    "@testing-library/react": "^14.0.0", // Testing library for React
+    "@types/jest": "^29.2.0",            // Jest type definitions
+    "@types/node": "^20.0.0",            // Node.js type definitions
+    "@types/react": "^18.0.28",          // React type definitions
+    "@types/react-dom": "^18.0.11",      // React DOM type definitions
+    "eslint": "^8.47.0",                 // Linting tool
+    "eslint-config-next": "^13.4.9",     // ESLint rules for Next.js
+    "jest": "^29.6.0",                   // JavaScript testing framework
+    "postcss": "^8.4.23",                // Required by Tailwind CSS
+    "autoprefixer": "^10.4.15",          // Required by Tailwind CSS
+    "typescript": "^5.2.2"               // TypeScript for type safety
+  },
+  "keywords": ["family", "website", "nextjs", "google-drive", "photos", "videos"],
+  "author": "Devyn Mmiller"
 }
