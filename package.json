@@ -1,5 +1,6 @@
 {
   "dependencies": {
+    "@types/google-apps-script": "^1.0.86",
     "@types/multer": "^1.4.12",
     "googleapis": "^144.0.0",
     "moment": "^2.29.4",

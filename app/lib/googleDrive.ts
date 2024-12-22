@@ -1,11 +1,8 @@
 import { google } from 'googleapis';
+import { drive, ROOT_FOLDER_ID, MIME_TYPES } from './googleDriveConfig';
 
 interface FileMetadata {
-  title?: string;
-  description?: string;
-  date?: string;
-  tags?: string[];
-  location?: string;
+  [key: string]: any;
 }
 
 const auth = new google.auth.GoogleAuth({
@@ -18,138 +15,134 @@ const auth = new google.auth.GoogleAuth({
 
 const drive = google.drive({ version: 'v3', auth });
 
-export const uploadFileToDrive = async (
-  file: Express.Multer.File | File,
-  metadata: FileMetadata,
-  folderId: string = process.env.GOOGLE_DRIVE_FOLDER_ID!
-) => {
-  const fileMetadata = {
-    name: 'originalname' in file ? file.originalname : file.name,
-    parents: [folderId],
-    description: JSON.stringify(metadata), // Store metadata in description field
-  };
-
-  const media = {
-    mimeType: 'mimetype' in file ? file.mimetype : file.type,
-    body: 'stream' in file ? file.stream : file,
-  };
-
+/**
+ * Upload a file to Google Drive
+ */
+export async function uploadFileToDrive(file: File, metadata: FileMetadata) {
   try {
+    const buffer = await file.arrayBuffer();
+    const media = {
+      mimeType: file.type || 'application/octet-stream',
+      body: Buffer.from(buffer),
+    };
+
+    const fileMetadata = {
+      name: file.name,
+      parents: [ROOT_FOLDER_ID],
+      description: JSON.stringify(metadata),
+    };
+
     const response = await drive.files.create({
       requestBody: fileMetadata,
-      media,
-      fields: 'id, name, description, webViewLink, webContentLink, mimeType, createdTime',
+      media: media,
+      fields: 'id, name, webContentLink, webViewLink, description',
     });
 
-    return {
-      ...response.data,
-      metadata: metadata,
-    };
-  } catch (error) {
-    console.error('Error uploading file to Google Drive:', error);
-    throw error;
-  }
-};
-
-export const listFilesInFolder = async (
-  folderId: string = process.env.GOOGLE_DRIVE_FOLDER_ID!,
-  fileType?: 'image' | 'video'
-) => {
-  try {
-    let query = `'${folderId}' in parents and trashed=false`;
-    if (fileType === 'image') {
-      query += " and mimeType contains 'image/'";
-    } else if (fileType === 'video') {
-      query += " and mimeType contains 'video/'";
-    }
-
-    const response = await drive.files.list({
-      q: query,
-      fields: 'files(id, name, description, webViewLink, webContentLink, mimeType, createdTime)',
-      orderBy: 'createdTime desc',
-    });
-
-    return response.data.files?.map(file => ({
-      ...file,
-      metadata: file.description ? JSON.parse(file.description) : {},
-    }));
-  } catch (error) {
-    console.error('Error listing files in Google Drive:', error);
-    throw error;
-  }
-};
-
-export const searchFiles = async (
-  query: string,
-  folderId: string = process.env.GOOGLE_DRIVE_FOLDER_ID!
-) => {
-  try {
-    const response = await drive.files.list({
-      q: `'${folderId}' in parents and (fullText contains '${query}' or name contains '${query}') and trashed=false`,
-      fields: 'files(id, name, description, webViewLink, webContentLink, mimeType, createdTime)',
-    });
-
-    return response.data.files?.map(file => ({
-      ...file,
-      metadata: file.description ? JSON.parse(file.description) : {},
-    }));
-  } catch (error) {
-    console.error('Error searching files in Google Drive:', error);
-    throw error;
-  }
-};
-
-export const updateFileMetadata = async (
-  fileId: string,
-  metadata: FileMetadata
-) => {
-  try {
-    const response = await drive.files.update({
-      fileId,
-      requestBody: {
-        description: JSON.stringify(metadata),
-      },
-      fields: 'id, name, description, webViewLink, webContentLink, mimeType, createdTime',
-    });
-
-    return {
-      ...response.data,
-      metadata: metadata,
-    };
-  } catch (error) {
-    console.error('Error updating file metadata:', error);
-    throw error;
-  }
-};
-
-export const deleteFile = async (fileId: string) => {
-  try {
-    await drive.files.delete({ fileId });
-    return true;
-  } catch (error) {
-    console.error('Error deleting file:', error);
-    throw error;
-  }
-};
-
-export const getPublicDownloadLink = async (fileId: string) => {
-  try {
+    // Make the file publicly accessible
     await drive.permissions.create({
-      fileId,
+      fileId: response.data.id!,
       requestBody: {
         role: 'reader',
         type: 'anyone',
       },
     });
 
-    const response = await drive.files.get({
-      fileId,
-      fields: 'webContentLink',
+    // Refresh the file to get the updated links
+    const file = await drive.files.get({
+      fileId: response.data.id!,
+      fields: 'id, name, webContentLink, webViewLink, description',
     });
 
-    return response.data.webContentLink;
+    return file.data;
   } catch (error) {
-    console.error('Error generating public link:', error);
+    console.error('Error uploading file:', error);
     throw error;
   }
-};
+}
+
+/**
+ * List files in a specific folder
+ */
+export async function listFilesInFolder(folderId = ROOT_FOLDER_ID) {
+  try {
+    const response = await drive.files.list({
+      q: `'${folderId}' in parents and trashed = false`,
+      fields: 'files(id, name, mimeType, webContentLink, webViewLink, description)',
+      pageSize: 1000,
+    });
+
+    return response.data.files || [];
+  } catch (error) {
+    console.error('Error listing files:', error);
+    throw error;
+  }
+}
+
+/**
+ * Update file metadata
+ */
+export async function updateFileMetadata(fileId: string, metadata: FileMetadata) {
+  try {
+    const response = await drive.files.update({
+      fileId,
+      requestBody: {
+        description: JSON.stringify(metadata),
+      },
+      fields: 'id, name, webContentLink, webViewLink, description',
+    });
+
+    return response.data;
+  } catch (error) {
+    console.error('Error updating file metadata:', error);
+    throw error;
+  }
+}
+
+/**
+ * Delete a file
+ */
+export async function deleteFile(fileId: string) {
+  try {
+    await drive.files.delete({
+      fileId,
+    });
+  } catch (error) {
+    console.error('Error deleting file:', error);
+    throw error;
+  }
+}
+
+/**
+ * Search files by query
+ */
+export async function searchFiles(query: string) {
+  try {
+    const response = await drive.files.list({
+      q: `fullText contains '${query}' and '${ROOT_FOLDER_ID}' in parents and trashed = false`,
+      fields: 'files(id, name, mimeType, webContentLink, webViewLink, description)',
+      pageSize: 1000,
+    });
+
+    return response.data.files || [];
+  } catch (error) {
+    console.error('Error searching files:', error);
+    throw error;
+  }
+}
+
+/**
+ * Get file by ID
+ */
+export async function getFile(fileId: string) {
+  try {
+    const response = await drive.files.get({
+      fileId,
+      fields: 'id, name, mimeType, webContentLink, webViewLink, description',
+    });
+
+    return response.data;
+  } catch (error) {
+    console.error('Error getting file:', error);
+    throw error;
+  }
+}

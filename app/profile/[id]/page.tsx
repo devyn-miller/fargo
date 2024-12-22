@@ -2,9 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useParams } from 'next/navigation'
-import { ref, onValue } from 'firebase/database'
-import { db } from '../../lib/firebase'
-import { PageHeader } from '../../components/PageHeader'
+import { listFilesInFolder, uploadFileToDrive, updateFileMetadata, deleteFile } from '../../lib/googleDrive'
 import Image from 'next/image'
 
 interface UserProfile {
@@ -24,28 +22,39 @@ export default function UserProfilePage() {
   const { id } = useParams()
   const [profile, setProfile] = useState<UserProfile | null>(null)
   const [contributions, setContributions] = useState<UserContribution[]>([])
+  const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    const profileRef = ref(db, `users/${id}`)
-    onValue(profileRef, (snapshot) => {
-      setProfile(snapshot.val())
-    })
+    const fetchProfile = async () => {
+      try {
+        const files = await listFilesInFolder(undefined)
+        const profileFile = files.find(
+          file => file.name === `${id}.profile`
+        ) as UserProfile | undefined
 
-    const contributionsRef = ref(db, `contributions/${id}`)
-    onValue(contributionsRef, (snapshot) => {
-      const data = snapshot.val()
-      if (data) {
-        const contributionList = Object.entries(data).map(([id, contribution]: [string, any]) => ({
-          id,
-          ...contribution,
-        }))
-        setContributions(contributionList.sort((a, b) => b.timestamp - a.timestamp))
+        if (profileFile) {
+          setProfile(profileFile)
+        }
+      } catch (error) {
+        console.error('Error fetching profile:', error)
+      } finally {
+        setLoading(false)
       }
-    })
+    }
+
+    fetchProfile()
   }, [id])
 
+  if (loading) {
+    return (
+      <div>Loading...</div>
+    )
+  }
+
   if (!profile) {
-    return <div>Loading...</div>
+    return (
+      <div>Profile not found</div>
+    )
   }
 
   return (
@@ -86,4 +95,3 @@ export default function UserProfilePage() {
     </div>
   )
 }
-
